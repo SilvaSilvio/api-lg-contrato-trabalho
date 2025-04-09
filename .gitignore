@@ -1,0 +1,61 @@
+# Arquivos de configuração com dados sensíveis
+*.env
+.env
+config.ini
+settings.json
+database.json
+credentials.json
+
+# Arquivos de banco de dados
+*.db
+*.sqlite
+*.sqlite3
+
+# Arquivos de cache e temporários
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Arquivos de ambiente virtual
+venv/
+env/
+ENV/
+.venv/
+.env/
+.ENV/
+
+# Arquivos de IDE e editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Arquivos de log
+*.log
+logs/
+log/
+
+# Arquivos de build e distribuição
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Arquivos específicos do projeto
+# Adicione aqui quaisquer arquivos específicos do seu projeto que contenham dados sensíveis
+# Por exemplo:
+# connection_params.py
+# api_keys.py
+# secrets.py
+parametros_conexao.py
