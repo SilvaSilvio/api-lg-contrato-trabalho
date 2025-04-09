@@ -385,118 +385,184 @@ class Database:
                 }
             return None
     
-    def atualizar_empresa(self, codigo: str, nome: str, tenetID: str, ambiente: str) -> bool:
-        """Atualiza os dados de uma empresa existente.
-        
-        Args:
-            codigo: Código da empresa a ser atualizada
-            nome: Novo nome da empresa
-            tenetID: Novo ID do tenant
-            ambiente: Novo ambiente
-            
-        Returns:
-            bool: True se a atualização foi bem-sucedida, False caso contrário
-        """
+    def atualizar_empresa(self, codigo_original, codigo, nome, tenetID, ambiente):
+        """Atualiza os dados de uma empresa no banco de dados."""
         try:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute('''
-                    UPDATE empresas
-                    SET nome = ?, tenetID = ?, ambiente = ?
+                cursor.execute("""
+                    UPDATE empresas 
+                    SET codigo = ?, nome = ?, tenetID = ?, ambiente = ?
                     WHERE codigo = ?
-                ''', (nome, tenetID, ambiente, codigo))
-                conn.commit()
-                return True
-        except sqlite3.Error:
-            return False
+                """, (codigo, nome, tenetID, ambiente, codigo_original))
+            return True, "Empresa atualizada com sucesso!"
+        except Exception as e:
+            return False, f"Erro ao atualizar empresa: {str(e)}"
     
-    def excluir_empresa(self, codigo: str) -> bool:
-        """Exclui uma empresa do sistema.
-        
-        Args:
-            codigo: Código da empresa a ser excluída
+    def criar_empresa(self, codigo, nome, tenetID, ambiente):
+        """Cria uma nova empresa no banco de dados."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO empresas (codigo, nome, tenetID, ambiente)
+                    VALUES (?, ?, ?, ?)
+                """, (codigo, nome, tenetID, ambiente))
+            return True, "Empresa criada com sucesso!"
+        except Exception as e:
+            return False, f"Erro ao criar empresa: {str(e)}"
+    
+    def excluir_empresa(self, codigo):
+        """Exclui uma empresa do sistema."""
+        try:
+            print(f"Tentando excluir empresa com código: {codigo}")
             
-        Returns:
-            bool: True se a exclusão foi bem-sucedida, False caso contrário
-        """
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            try:
-                # Excluir permissões primeiro
-                cursor.execute('''
-                    DELETE FROM permissoes
-                    WHERE empresa_codigo = ?
-                ''', (codigo,))
-                
-                # Excluir empresa
-                cursor.execute('''
-                    DELETE FROM empresas
-                    WHERE codigo = ?
-                ''', (codigo,))
-                
-                conn.commit()
-                return True
-            except sqlite3.Error:
+            # Primeiro, excluir as permissões
+            print("Excluindo permissões da empresa...")
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM permissoes WHERE empresa_codigo = ?", (codigo,))
+                print(f"Permissões excluídas: {cursor.rowcount} registros afetados")
+            
+            # Depois, excluir a empresa
+            print("Excluindo empresa...")
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM empresas WHERE codigo = ?", (codigo,))
+                print(f"Empresa excluída: {cursor.rowcount} registros afetados")
+            
+            if cursor.rowcount == 0:
+                print("Nenhuma empresa foi excluída. Verifique se o código existe.")
                 return False
+            
+            conn.commit()
+            print("Exclusão concluída com sucesso")
+            return True
+            
+        except sqlite3.Error as e:
+            print(f"Erro ao excluir empresa: {str(e)}")
+            return False
     
     def adicionar_operador(self, email: str, senha: str, ativo: bool) -> bool:
         """Adiciona um novo operador."""
         try:
-            cursor = self.get_connection().cursor()
-            cursor.execute(
-                'INSERT INTO operadores (email, senha, ativo) VALUES (?, ?, ?)',
-                (email, senha, ativo)
-            )
-            self.get_connection().commit()
-            return True
+            senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    'INSERT INTO operadores (email, senha, ativo) VALUES (?, ?, ?)',
+                    (email, senha_hash, ativo)
+                )
+                conn.commit()
+                return True
         except sqlite3.IntegrityError:
             return False
     
-    def atualizar_operador(self, email: str, senha: str, ativo: bool) -> bool:
-        """Atualiza os dados de um operador existente."""
+    def atualizar_operador(self, email_original: str, email: str, senha: str, ativo: bool) -> None:
+        """
+        Atualiza um operador existente.
+        
+        Args:
+            email_original (str): Email original do operador a ser atualizado
+            email (str): Novo email do operador
+            senha (str): Nova senha do operador
+            ativo (bool): Novo status do operador
+            
+        Raises:
+            ValueError: Se o operador não for encontrado ou se houver erro na atualização
+        """
         try:
+            # Verifica se o operador existe
             cursor = self.get_connection().cursor()
+            cursor.execute("SELECT * FROM operadores WHERE email = ?", (email_original,))
+            operador = cursor.fetchone()
+            
+            if not operador:
+                raise ValueError(f"Operador com email {email_original} não encontrado")
+            
+            # Verifica se o novo email já está em uso por outro operador
+            if email != email_original:
+                cursor.execute("SELECT * FROM operadores WHERE email = ?", (email,))
+                operador_existente = cursor.fetchone()
+                if operador_existente:
+                    raise ValueError(f"Já existe um operador com o email {email}")
+            
+            # Atualiza o operador
             cursor.execute(
-                'UPDATE operadores SET senha = ?, ativo = ? WHERE email = ?',
-                (senha, ativo, email)
+                "UPDATE operadores SET email = ?, senha = ?, ativo = ? WHERE email = ?",
+                (email, senha, ativo, email_original)
             )
             self.get_connection().commit()
-            return cursor.rowcount > 0
-        except sqlite3.Error:
-            return False
+            
+        except Exception as e:
+            self.get_connection().rollback()
+            raise ValueError(f"Erro ao atualizar operador: {str(e)}")
     
     def excluir_operador(self, email: str) -> bool:
         """Exclui um operador."""
         try:
-            cursor = self.get_connection().cursor()
-            cursor.execute('DELETE FROM operadores WHERE email = ?', (email,))
-            self.get_connection().commit()
-            return cursor.rowcount > 0
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('DELETE FROM operadores WHERE email = ?', (email,))
+                conn.commit()
+                return cursor.rowcount > 0
         except sqlite3.Error:
             return False
     
     def get_operador(self, email: str) -> dict:
         """Retorna os dados de um operador específico."""
-        cursor = self.get_connection().cursor()
-        cursor.execute('SELECT * FROM operadores WHERE email = ?', (email,))
-        row = cursor.fetchone()
-        if row:
-            return {
-                'email': row[0],
-                'senha': row[1],
-                'ativo': bool(row[2])
-            }
-        return None
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM operadores WHERE email = ?', (email,))
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'email': row[0],
+                    'senha': row[1],
+                    'ativo': bool(row[2])
+                }
+            return None
     
     def get_todos_operadores(self) -> list:
         """Retorna todos os operadores cadastrados."""
-        cursor = self.get_connection().cursor()
-        cursor.execute('SELECT * FROM operadores')
-        return [
-            {
-                'email': row[0],
-                'senha': row[1],
-                'ativo': bool(row[2])
-            }
-            for row in cursor.fetchall()
-        ] 
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM operadores')
+            return [
+                {
+                    'email': row[0],
+                    'senha': row[1],
+                    'ativo': bool(row[2])
+                }
+                for row in cursor.fetchall()
+            ]
+    
+    def criar_usuario(self, username: str, nome: str, senha: str, is_admin: bool, empresas: List[str]) -> bool:
+        """Cria um novo usuário com suas permissões.
+        
+        Args:
+            username: Nome de usuário
+            nome: Nome completo do usuário
+            senha: Senha do usuário
+            is_admin: Se o usuário é administrador
+            empresas: Lista de códigos das empresas que o usuário terá acesso
+        """
+        try:
+            senha_hash = hashlib.sha256(senha.encode()).hexdigest()
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                    INSERT INTO usuarios (username, senha, nome, is_admin)
+                    VALUES (?, ?, ?, ?)
+                ''', (username, senha_hash, nome, int(is_admin)))
+                
+                # Adicionar permissões
+                cursor.executemany('''
+                    INSERT INTO permissoes (usuario, empresa_codigo)
+                    VALUES (?, ?)
+                ''', [(username, empresa) for empresa in empresas])
+                
+                conn.commit()
+                return True
+        except sqlite3.IntegrityError:
+            return False 
