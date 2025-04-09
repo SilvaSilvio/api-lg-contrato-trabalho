@@ -25,13 +25,15 @@ class ContratoTrabalhoLG:
         self.operator_email = operator_email
         self.operator_password = operator_password
         
-        # Usar credenciais do operador se fornecidas, caso contrário usar as padrão
-        auth_username = operator_email # if operator_email else usuario
-        auth_password = operator_password # if operator_password else senha
+        # Importar configurações
+        import parametros_conexao
+        
+        # Usar credenciais do operador se fornecidas, caso contrário usar as padrão do .env
+        auth_username = operator_email if operator_email else parametros_conexao.config.username
+        auth_password = operator_password if operator_password else parametros_conexao.config.password
         
         print(f"auth_username: {auth_username}")
         print(f"auth_password: {auth_password}")
-        
         
         # Configurar sessão com autenticação básica
         session = Session()
@@ -45,7 +47,7 @@ class ContratoTrabalhoLG:
 
         # Criar cliente SOAP com WSDL
         self.client = Client(
-            wsdl='https://prd-api1.lg.com.br/v1/ServicoDeContratoDeTrabalho',
+            wsdl=parametros_conexao.config.wsdl_url,
             transport=transport,
             plugins=[history]
         )
@@ -76,19 +78,50 @@ class ContratoTrabalhoLG:
             List[Dict[str, Any]]: Lista de contratos do mês especificado
         """
         try:
+            # Log detalhado dos parâmetros recebidos
+            print("\n" + "*" * 80)
+            print("DEPURAÇÃO DE CONTRATO_TRABALHO - MÉTODO BUSCAR_CONTRATOS_POR_MES")
+            print("*" * 80)
+            print(f"Parâmetros recebidos:")
+            print(f"  - ano: {ano} (tipo: {type(ano)})")
+            print(f"  - mês: {mes} (tipo: {type(mes)})")
+            print(f"  - tenet_id: {tenet_id} (tipo: {type(tenet_id)})")
+            print(f"  - ambiente: {ambiente} (tipo: {type(ambiente)})")
+            print(f"  - operator_email: {operator_email} (tipo: {type(operator_email)})")
+            print(f"  - operator_password: {'***' if operator_password else None} (tipo: {type(operator_password)})")
+            
+            # Log de variáveis globais (valores padrão)
+            import parametros_conexao
+            print(f"\nVariáveis globais de parametros_conexao.py:")
+            print(f"  - usuario padrão: {parametros_conexao.config.username}")
+            print(f"  - senha padrão: {'***' if parametros_conexao.config.password else None}")
+            print(f"  - config: {parametros_conexao.config}")
+            
             # Se credenciais de operador foram fornecidas, reinicializar o cliente
             if operator_email and operator_password:
+                print(f"\nReinicializando cliente com credenciais específicas do operador: {operator_email}")
                 self._initialize_client(operator_email, operator_password)
+            else:
+                print("\nUsando cliente com credenciais padrão")
             
             # Usar os parâmetros fornecidos ou os valores padrão
-            tenet_id_to_use = tenet_id if tenet_id is not None else tenetId
-            ambiente_to_use = ambiente if ambiente is not None else ambiente
+            import parametros_conexao
             
-            print(f"tenet_id_to_use: {tenet_id_to_use}")
-            print(f"ambiente_to_use: {ambiente_to_use}")
+            # Se o operador for o usuário padrão, usar os valores do .env
+            if self.operator_email == parametros_conexao.config.username:
+                tenet_id_to_use = parametros_conexao.config.tenet_id
+                ambiente_to_use = parametros_conexao.config.ambiente
+            else:
+                tenet_id_to_use = tenet_id if tenet_id is not None else parametros_conexao.config.tenet_id
+                ambiente_to_use = ambiente if ambiente is not None else parametros_conexao.config.ambiente
+            
+            print(f"\nParâmetros efetivos para consulta:")
+            print(f"  - tenet_id_to_use: {tenet_id_to_use}")
+            print(f"  - ambiente_to_use: {ambiente_to_use}")
             
             # Obter primeiro dia do mês especificado
             data_referencia = date(ano, mes, 1)
+            print(f"  - data_referencia: {data_referencia} (primeiro dia do mês)")
 
             # Ajuste do namespace
             header_factory = self.client.type_factory('ns3')
@@ -101,14 +134,20 @@ class ContratoTrabalhoLG:
 
             # Criar os tokens para autenticação
             token_usuario = header_factory.LGTokenUsuario(
-                Senha=self.operator_password, # if self.operator_password else senha,
-                Usuario=self.operator_email, # if self.operator_email else usuario,
+                Senha=self.operator_password if self.operator_password else parametros_conexao.config.password,
+                Usuario=self.operator_email if self.operator_email else parametros_conexao.config.username,
                 GuidTenant=tenet_id_to_use
             )
 
             autenticacao = header_factory.LGAutenticacao(
                 TokenUsuario=token_usuario
             )
+            
+            print(f"\nDados de autenticação preparados:")
+            print(f"  - Usuario: {self.operator_email}")
+            print(f"  - Senha: {'***' if self.operator_password else None}")
+            print(f"  - GuidTenant: {tenet_id_to_use}")
+            print(f"  - Ambiente: {ambiente_to_use}")
 
             # Criar o tipo para Empresas
             filtro_com_codigo_type = self.client.get_type('{lg.com.br/api/dto/v1}FiltroComCodigoNumerico')

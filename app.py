@@ -132,7 +132,8 @@ class TelaContratos:
             options=[],
             border_radius=8,
             filled=True,
-            bgcolor=ft.colors.WHITE
+            bgcolor=ft.colors.WHITE,
+            label="Empresa"
         )
         
         # Dropdown de operadores
@@ -278,6 +279,10 @@ class TelaContratos:
                 
                 # Atualizar área administrativa
                 self.atualizar_area_administrativa()
+                
+                # Garantir que os dropdowns de empresas e operadores sejam atualizados
+                atualizar_empresas()
+                atualizar_operadores()
             else:
                 # Login falhou
                 erro_login.value = "Usuário ou senha inválidos"
@@ -299,8 +304,7 @@ class TelaContratos:
             )
             self.page.update()
         
-        def buscar_contratos(self, e):
-            """Busca contratos com base nos filtros selecionados."""
+        def buscar_contratos(e):
             try:
                 # Validar mês e ano
                 if not mes.value or not ano.value:
@@ -316,57 +320,100 @@ class TelaContratos:
                 # Limpar tabela atual
                 data_table.rows.clear()
 
-                # Buscar contratos
+                # INFORMAÇÕES DE DEPURAÇÃO DETALHADAS
+                print("=" * 50)
+                print("DEPURAÇÃO DE BUSCA DE CONTRATOS")
+                print("=" * 50)
+                print(f"Mês selecionado: {mes.value} (tipo: {type(mes.value)})")
+                print(f"Ano selecionado: {ano.value} (tipo: {type(ano.value)})")
+                print(f"Empresa selecionada: {empresa_dropdown.value} (tipo: {type(empresa_dropdown.value)})")
+                print(f"Operador selecionado: {operador_dropdown.value} (tipo: {type(operador_dropdown.value)})")
+                
+                # Debug: Mostrar opções disponíveis
+                print("\nOpções disponíveis no dropdown de empresas:")
+                for option in empresa_dropdown.options:
+                    if option is not None and hasattr(option, 'value'):
+                        print(f"  - Valor: '{option.value}', Texto: '{option.text}'")
+                    else:
+                        print(f"  - Opção inválida: {option}")
+
+                print("\nOpções disponíveis no dropdown de operadores:")
+                for option in operador_dropdown.options:
+                    if option is not None and hasattr(option, 'value'):
+                        print(f"  - Valor: '{option.value}', Texto: '{option.text}'")
+                    else:
+                        print(f"  - Opção inválida: {option}")
+                print("=" * 50)
+
+                # Fetch contracts based on selected filters
                 contratos, mensagem = self.contrato_controller.buscar_contratos(
-                    mes.value,
-                    ano.value,
-                    empresa_dropdown.value,
-                    operador_dropdown.value
+                    mes=mes.value,
+                    ano=ano.value,
+                    codigo_empresa=empresa_dropdown.value,
+                    email_operador=operador_dropdown.value
                 )
-                
-                # Preencher tabela
+
+                # Imprimir resultados da busca
+                print("\nRESULTADOS DA BUSCA:")
+                print(f"Total de contratos encontrados: {len(contratos)}")
+                if len(contratos) > 0:
+                    print("Primeiros 3 contratos (amostra):")
+                    for i, contrato in enumerate(contratos[:3]):
+                        if isinstance(contrato, dict):
+                            print(f"Contrato {i+1}: Matrícula={contrato.get('matricula', 'N/A')}, Nome={contrato.get('nome', 'N/A')}")
+                        else:
+                            print(f"Contrato {i+1}: Formato inválido - {type(contrato)}")
+                print("=" * 50)
+
+                # Preencher tabela com os contratos
                 for contrato in contratos:
-                    data_table.rows.append(
-                        ft.DataRow(
-                            cells=[
-                                ft.DataCell(ft.Text(contrato['matricula'])),
-                                ft.DataCell(ft.Text(contrato['nome'])),
-                                ft.DataCell(ft.Text(contrato['cpf'])),
-                                ft.DataCell(ft.Text(contrato['data_admissao'])),
-                                ft.DataCell(ft.Text(contrato['cargo'])),
-                                ft.DataCell(ft.Text(contrato['departamento'])),
-                                ft.DataCell(
-                                    ft.Container(
-                                        content=ft.Text(
-                                            contrato['situacao'],
-                                            color=ft.colors.WHITE,
-                                            text_align=ft.TextAlign.CENTER
-                                        ),
-                                        bgcolor=ft.colors.GREEN if contrato['situacao'] == 'Ativo' else ft.colors.RED_400,
-                                        border_radius=15,
-                                        padding=ft.padding.symmetric(horizontal=10, vertical=5)
-                                    )
-                                ),
-                                ft.DataCell(ft.Text(str(contrato.get('empresa', {}).get('Codigo', '')))),
-                            ]
+                    if isinstance(contrato, dict):
+                        data_table.rows.append(
+                            ft.DataRow(
+                                cells=[
+                                    ft.DataCell(ft.Text(str(contrato.get('matricula', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('nome', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('cpf', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('data_admissao', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('cargo', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('departamento', '')))),
+                                    ft.DataCell(
+                                        ft.Container(
+                                            content=ft.Text(
+                                                str(contrato.get('situacao', '')),
+                                                color=ft.colors.WHITE,
+                                                text_align=ft.TextAlign.CENTER
+                                            ),
+                                            bgcolor=ft.colors.GREEN if contrato.get('situacao') == 'Ativo' else ft.colors.RED_400,
+                                            border_radius=15,
+                                            padding=ft.padding.symmetric(horizontal=10, vertical=5)
+                                        )
+                                    ),
+                                    ft.DataCell(ft.Text(str(contrato.get('empresa', {}).get('Codigo', '')))),
+                                ]
+                            )
                         )
-                    )
-                
+
                 # Atualizar contador de registros
                 total_registros = len(contratos)
                 table_container.content.controls[0].controls[1].value = f"Total de registros: {total_registros}"
-                
+
                 # Esconder progresso
                 self.progress.visible = False
                 self.page.update()
+
             except Exception as e:
+                print(f"Erro ao buscar contratos: {str(e)}")
+                import traceback
+                print(f"Detalhes do erro:\n{traceback.format_exc()}")
                 self.page.show_snack_bar(
                     ft.SnackBar(
-                        content=ft.Text(f"Erro ao buscar contratos: {e}"),
-                        bgcolor=ft.colors.RED_400,
-                        action="OK"
+                        content=ft.Text(f"Erro ao buscar contratos: {str(e)}"),
+                        bgcolor=ft.colors.RED_400
                     )
                 )
+                self.progress.visible = False
+                self.page.update()
         
         # Botões
         btn_login = ft.ElevatedButton(
@@ -557,6 +604,10 @@ class TelaContratos:
         
         # Adicionar container principal à página
         page.add(self.main_container)
+        
+        # Garantir que os dropdowns sejam preenchidos inicialmente
+        atualizar_empresas()
+        atualizar_operadores()
     
     def criar_tab_usuarios(self, page):
         # Campos para cadastro/edição de usuários
@@ -2240,6 +2291,65 @@ class TelaContratos:
             print(f"Erro ao forçar atualização da interface: {str(e)}")
             # Tenta uma atualização básica em caso de erro
             self.page.update()
+
+    async def buscar_contratos_api(self, mes, ano, empresa_selecionada, operador_selecionado):
+        try:
+            # Validar mês e ano
+            if not mes or not ano:
+                raise ValueError("Mês e ano são obrigatórios")
+
+            # Converter para inteiros
+            mes_val = int(mes)
+            ano_val = int(ano)
+
+            # Validar valores
+            if mes_val < 1 or mes_val > 12:
+                raise ValueError("Mês deve estar entre 1 e 12")
+            if ano_val < 2000 or ano_val > 2100:
+                raise ValueError("Ano inválido")
+
+            # Log detalhado dos parâmetros
+            print("\n" + "="*50)
+            print("PARÂMETROS PARA BUSCA DE CONTRATOS")
+            print("="*50)
+            print(f"Mês: {mes_val}")
+            print(f"Ano: {ano_val}")
+            
+            if empresa_selecionada:
+                print("\nDados da Empresa:")
+                print(f"  - Código: {empresa_selecionada.get('codigo', 'N/A')}")
+                print(f"  - Nome: {empresa_selecionada.get('nome', 'N/A')}")
+                print(f"  - TenetID: {empresa_selecionada.get('tenetID', 'N/A')}")
+                print(f"  - Ambiente: {empresa_selecionada.get('ambiente', 'N/A')}")
+            else:
+                print("\nEmpresa: Nenhuma selecionada (usando valores padrão)")
+            
+            if operador_selecionado:
+                print("\nDados do Operador:")
+                print(f"  - Email: {operador_selecionado.get('email', 'N/A')}")
+                print(f"  - Senha: {'*' * len(operador_selecionado.get('senha', ''))} (ocultada)")
+            else:
+                print("\nOperador: Nenhum selecionado (usando valores padrão)")
+            
+            print("\nParâmetros sendo passados para a API:")
+            print(f"  - tenet_id: {empresa_selecionada.get('tenetID') if empresa_selecionada else 'None'}")
+            print(f"  - ambiente: {empresa_selecionada.get('ambiente') if empresa_selecionada else 'None'}")
+            print(f"  - operator_email: {operador_selecionado.get('email') if operador_selecionado else 'None'}")
+            print(f"  - operator_password: {'*' * len(operador_selecionado.get('senha', '')) if operador_selecionado else 'None'}")
+            print("="*50 + "\n")
+
+            # Buscar contratos com os parâmetros da empresa selecionada
+            contratos = self.contrato_controller.buscar_contratos(
+                mes=mes_val,
+                ano=ano_val,
+                codigo_empresa=empresa_selecionada,
+                email_operador=operador_selecionado
+            )
+
+            return contratos
+        except Exception as e:
+            print(f"Erro ao buscar contratos: {e}")
+            raise
 
 if __name__ == "__main__":
     app = TelaContratos()
