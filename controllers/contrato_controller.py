@@ -95,12 +95,8 @@ class ContratoController:
             
             print(f"\nContratos retornados pelo model: {len(contratos)}")
             
-            # Filtrar por empresa selecionada
-            if codigo_empresa:
-                print(f"Filtrando contratos para a empresa com código: {codigo_empresa}")
-                contratos_antes = len(contratos)
-                contratos = self.contrato_model.filtrar_contratos_por_empresa(contratos, codigo_empresa)
-                print(f"Total após filtro por empresa: {len(contratos)} (removidos: {contratos_antes - len(contratos)})")
+            # Não filtrar mais por empresa, retornar todos os contratos
+            print("Retornando todos os contratos sem filtrar por empresa")
             
             print("=" * 70)
             return contratos, f"Encontrados {len(contratos)} contratos"

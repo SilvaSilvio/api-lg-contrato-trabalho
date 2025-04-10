@@ -13,46 +13,42 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),'..')))
 #from parametros_conexao import usuario, senha, ambiente, tenetId, config
 
 class ContratoTrabalhoLG:
+    # URL fixa do WSDL
+    WSDL_URL = 'https://prd-api1.lg.com.br/v1/ServicoDeContratoDeTrabalho'
+
     def __init__(self):
         self.client = None
-        self.operator_email = None
-        self.operator_password = None
-        self._initialize_client()
+        # Remover inicialização das credenciais no construtor
+        # self.operator_email = None
+        # self.operator_password = None
+        # self.tenet_id = None
+        # self.ambiente = None
+        # self.wsdl_url = None
+        # self._initialize_client()
 
-    def _initialize_client(self, operator_email=None, operator_password=None):
-        """Inicializa o cliente WSDL com as configurações do LG."""
-        # Armazenar credenciais do operador se fornecidas
-        self.operator_email = operator_email
-        self.operator_password = operator_password
-        
-        # Importar configurações
-        import parametros_conexao
-        
-        # Usar credenciais do operador se fornecidas, caso contrário usar as padrão do .env
-        auth_username = operator_email if operator_email else parametros_conexao.config.username
-        auth_password = operator_password if operator_password else parametros_conexao.config.password
-        
-        print(f"auth_username: {auth_username}")
-        print(f"auth_password: {auth_password}")
-        
-        # Configurar sessão com autenticação básica
+    def _initialize_client(self, operator_email: str, operator_password: str, tenet_id: str, ambiente: str):
+        """Inicializa o cliente WSDL com as credenciais fornecidas."""
+        if not all([operator_email, operator_password, tenet_id, ambiente]):
+            raise ValueError("Todos os parâmetros são obrigatórios: operator_email, operator_password, tenet_id, ambiente")
+
+        # Criar sessão com autenticação básica
         session = Session()
-        session.auth = HTTPBasicAuth(auth_username, auth_password)
-
-        # Configurar transporte com sessão autenticada
+        session.auth = HTTPBasicAuth(operator_email, operator_password)
+        
+        # Criar transporte com a sessão autenticada
         transport = Transport(session=session)
-
+        
         # Plugin para histórico (útil para debug)
         history = HistoryPlugin()
 
         # Criar cliente SOAP com WSDL
         self.client = Client(
-            wsdl=parametros_conexao.config.wsdl_url,
+            wsdl=self.WSDL_URL,
             transport=transport,
             plugins=[history]
         )
 
-    def buscar_contratos_mes_atual(self) -> List[Dict[str, Any]]:
+    def buscar_contratos_mes_atual(self, operator_email, operator_password, tenet_id, ambiente) -> List[Dict[str, Any]]:
         """
         Busca contratos com data de admissão no mês atual.
         
@@ -60,28 +56,28 @@ class ContratoTrabalhoLG:
             List[Dict[str, Any]]: Lista de contratos do mês atual
         """
         hoje = date.today()
-        return self.buscar_contratos_por_mes(hoje.year, hoje.month)
+        return self.buscar_contratos_por_mes(hoje.year, hoje.month, tenet_id, ambiente, operator_email, operator_password)
 
-    def buscar_contratos_por_mes(self, ano: int, mes: int, tenet_id: str = None, ambiente: str = None, operator_email: str = None, operator_password: str = None) -> List[Dict[str, Any]]:
+    def buscar_contratos_por_mes(self, ano: int, mes: int, tenet_id: str, ambiente: str, operator_email: str, operator_password: str) -> List[Dict[str, Any]]:
         """
         Busca contratos com data de admissão em um mês específico.
         
         Args:
             ano: Ano para filtrar (ex: 2025)
             mes: Mês para filtrar (1-12, ex: 4 para abril)
-            tenet_id: ID do tenant no sistema (opcional, usa o valor padrão se não fornecido)
-            ambiente: Ambiente (opcional, usa o valor padrão se não fornecido)
-            operator_email: Email do operador para autenticação (opcional)
-            operator_password: Senha do operador para autenticação (opcional)
+            tenet_id: ID do tenant no sistema (obrigatório)
+            ambiente: Ambiente (obrigatório)
+            operator_email: Email do operador para autenticação (obrigatório)
+            operator_password: Senha do operador para autenticação (obrigatório)
             
         Returns:
             List[Dict[str, Any]]: Lista de contratos do mês especificado
         """
         try:
             # Log detalhado dos parâmetros recebidos
-            print("\n" + "*" * 80)
+            print("\n" + "=" * 80)
             print("DEPURAÇÃO DE CONTRATO_TRABALHO - MÉTODO BUSCAR_CONTRATOS_POR_MES")
-            print("*" * 80)
+            print("=" * 80)
             print(f"Parâmetros recebidos:")
             print(f"  - ano: {ano} (tipo: {type(ano)})")
             print(f"  - mês: {mes} (tipo: {type(mes)})")
@@ -89,35 +85,19 @@ class ContratoTrabalhoLG:
             print(f"  - ambiente: {ambiente} (tipo: {type(ambiente)})")
             print(f"  - operator_email: {operator_email} (tipo: {type(operator_email)})")
             print(f"  - operator_password: {'***' if operator_password else None} (tipo: {type(operator_password)})")
+            print(f"  - wsdl_url: {self.WSDL_URL}")
             
-            # Log de variáveis globais (valores padrão)
-            import parametros_conexao
-            print(f"\nVariáveis globais de parametros_conexao.py:")
-            print(f"  - usuario padrão: {parametros_conexao.config.username}")
-            print(f"  - senha padrão: {'***' if parametros_conexao.config.password else None}")
-            print(f"  - config: {parametros_conexao.config}")
+            # Validar parâmetros obrigatórios
+            if not all([tenet_id, ambiente, operator_email, operator_password]):
+                raise ValueError("Todos os parâmetros são obrigatórios: tenet_id, ambiente, operator_email, operator_password")
             
-            # Se credenciais de operador foram fornecidas, reinicializar o cliente
-            if operator_email and operator_password:
-                print(f"\nReinicializando cliente com credenciais específicas do operador: {operator_email}")
-                self._initialize_client(operator_email, operator_password)
-            else:
-                print("\nUsando cliente com credenciais padrão")
-            
-            # Usar os parâmetros fornecidos ou os valores padrão
-            import parametros_conexao
-            
-            # Se o operador for o usuário padrão, usar os valores do .env
-            if self.operator_email == parametros_conexao.config.username:
-                tenet_id_to_use = parametros_conexao.config.tenet_id
-                ambiente_to_use = parametros_conexao.config.ambiente
-            else:
-                tenet_id_to_use = tenet_id if tenet_id is not None else parametros_conexao.config.tenet_id
-                ambiente_to_use = ambiente if ambiente is not None else parametros_conexao.config.ambiente
-            
-            print(f"\nParâmetros efetivos para consulta:")
-            print(f"  - tenet_id_to_use: {tenet_id_to_use}")
-            print(f"  - ambiente_to_use: {ambiente_to_use}")
+            # Reinicializar cliente com as credenciais fornecidas
+            self._initialize_client(
+                operator_email=operator_email,
+                operator_password=operator_password,
+                tenet_id=tenet_id,
+                ambiente=ambiente
+            )
             
             # Obter primeiro dia do mês especificado
             data_referencia = date(ano, mes, 1)
@@ -129,14 +109,14 @@ class ContratoTrabalhoLG:
 
             # Criar o objeto 'LGContextoAmbiente'
             contexto_ambiente = header_factory.LGContextoAmbiente(
-                Ambiente=ambiente_to_use
+                Ambiente=ambiente
             )
 
             # Criar os tokens para autenticação
             token_usuario = header_factory.LGTokenUsuario(
-                Senha=self.operator_password if self.operator_password else parametros_conexao.config.password,
-                Usuario=self.operator_email if self.operator_email else parametros_conexao.config.username,
-                GuidTenant=tenet_id_to_use
+                Senha=operator_password,
+                Usuario=operator_email,
+                GuidTenant=tenet_id
             )
 
             autenticacao = header_factory.LGAutenticacao(
@@ -144,18 +124,10 @@ class ContratoTrabalhoLG:
             )
             
             print(f"\nDados de autenticação preparados:")
-            print(f"  - Usuario: {self.operator_email}")
-            print(f"  - Senha: {'***' if self.operator_password else None}")
-            print(f"  - GuidTenant: {tenet_id_to_use}")
-            print(f"  - Ambiente: {ambiente_to_use}")
-
-            # Criar o tipo para Empresas
-            filtro_com_codigo_type = self.client.get_type('{lg.com.br/api/dto/v1}FiltroComCodigoNumerico')
-            empresas_type = self.client.get_type('{lg.com.br/api/dto/v1}ArrayOfFiltroComCodigoNumerico')
-            
-            # Criar o objeto de empresa
-            empresa = filtro_com_codigo_type(Codigo='1')
-            empresas = empresas_type([empresa])
+            print(f"  - Usuario: {operator_email}")
+            print(f"  - Senha: {'***' if operator_password else None}")
+            print(f"  - GuidTenant: {tenet_id}")
+            print(f"  - Ambiente: {ambiente}")
 
             # Criar o filtro específico para DATA_ADMISSAO
             filtro_especifico_type = self.client.get_type('{lg.com.br/api/dto/v1}FiltroDeCamposEspecificos')
@@ -183,9 +155,8 @@ class ContratoTrabalhoLG:
             while True:
                 print(f'Buscando página {pagina + 1}...')
                 
-                # Criar filtro com paginação
+                # Criar filtro com paginação - sem filtrar por empresa
                 filtro = filtro_factory.FiltroDeContratoPorDemanda(
-                    Empresas=empresas,
                     PaginaAtual=pagina,
                     FiltrosEspecificos=filtros_especificos
                 )
@@ -287,13 +258,13 @@ if __name__ == "__main__":
     # contratos = contrato.buscar_contratos_mes_atual()
     
     # Busca contratos de um mês específico (abril/2025)
-    contratos = contrato.buscar_contratos_por_mes(2025, 4)
+    # contratos = contrato.buscar_contratos_por_mes(2025, 4)
     
-    if contratos:
-        print(f"\nEncontrados {len(contratos)} contratos no mês especificado:")
-        for contrato in contratos:
-            print("\nContrato:")
-            for key, value in contrato.items():
-                print(f"{key}: {value}")
-    else:
-        print("Nenhum contrato encontrado para o mês especificado.") 
+    # if contratos:
+    #     print(f"\nEncontrados {len(contratos)} contratos no mês especificado:")
+    #     for contrato in contratos:
+    #         print("\nContrato:")
+    #         for key, value in contrato.items():
+    #             print(f"{key}: {value}")
+    # else:
+    #     print("Nenhum contrato encontrado para o mês especificado.") 

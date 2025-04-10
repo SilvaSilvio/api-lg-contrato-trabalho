@@ -308,8 +308,11 @@ class TelaContratos:
             try:
                 # Validar mês e ano
                 if not mes.value or not ano.value:
-                    self.page.show_snack_bar(
-                        ft.SnackBar(content=ft.Text("Por favor, preencha mês e ano"))
+                    self.page.open(
+                        ft.SnackBar(
+                            content=ft.Text("Por favor, preencha mês e ano"),
+                            bgcolor=ft.colors.RED_400
+                        )
                     )
                     return
 
@@ -406,7 +409,7 @@ class TelaContratos:
                 print(f"Erro ao buscar contratos: {str(e)}")
                 import traceback
                 print(f"Detalhes do erro:\n{traceback.format_exc()}")
-                self.page.show_snack_bar(
+                self.page.open(
                     ft.SnackBar(
                         content=ft.Text(f"Erro ao buscar contratos: {str(e)}"),
                         bgcolor=ft.colors.RED_400
@@ -2292,64 +2295,132 @@ class TelaContratos:
             # Tenta uma atualização básica em caso de erro
             self.page.update()
 
-    async def buscar_contratos_api(self, mes, ano, empresa_selecionada, operador_selecionado):
+    async def buscar_contratos_api(self, e):
+        """Busca contratos usando a API."""
         try:
             # Validar mês e ano
-            if not mes or not ano:
-                raise ValueError("Mês e ano são obrigatórios")
+            if not self.mes_input.value or not self.ano_input.value:
+                self.page.show_snack_bar(
+                    ft.SnackBar(content=ft.Text("Mês e ano são obrigatórios"))
+                )
+                return
 
             # Converter para inteiros
-            mes_val = int(mes)
-            ano_val = int(ano)
+            mes_val = int(self.mes_input.value)
+            ano_val = int(self.ano_input.value)
 
-            # Validar valores
+            # Validar mês
             if mes_val < 1 or mes_val > 12:
-                raise ValueError("Mês deve estar entre 1 e 12")
-            if ano_val < 2000 or ano_val > 2100:
-                raise ValueError("Ano inválido")
+                self.page.show_snack_bar(
+                    ft.SnackBar(content=ft.Text("Mês deve estar entre 1 e 12"))
+                )
+                return
 
-            # Log detalhado dos parâmetros
-            print("\n" + "="*50)
-            print("PARÂMETROS PARA BUSCA DE CONTRATOS")
-            print("="*50)
-            print(f"Mês: {mes_val}")
-            print(f"Ano: {ano_val}")
-            
-            if empresa_selecionada:
-                print("\nDados da Empresa:")
-                print(f"  - Código: {empresa_selecionada.get('codigo', 'N/A')}")
-                print(f"  - Nome: {empresa_selecionada.get('nome', 'N/A')}")
-                print(f"  - TenetID: {empresa_selecionada.get('tenetID', 'N/A')}")
-                print(f"  - Ambiente: {empresa_selecionada.get('ambiente', 'N/A')}")
-            else:
-                print("\nEmpresa: Nenhuma selecionada (usando valores padrão)")
-            
-            if operador_selecionado:
-                print("\nDados do Operador:")
-                print(f"  - Email: {operador_selecionado.get('email', 'N/A')}")
-                print(f"  - Senha: {'*' * len(operador_selecionado.get('senha', ''))} (ocultada)")
-            else:
-                print("\nOperador: Nenhum selecionado (usando valores padrão)")
-            
-            print("\nParâmetros sendo passados para a API:")
-            print(f"  - tenet_id: {empresa_selecionada.get('tenetID') if empresa_selecionada else 'None'}")
-            print(f"  - ambiente: {empresa_selecionada.get('ambiente') if empresa_selecionada else 'None'}")
-            print(f"  - operator_email: {operador_selecionado.get('email') if operador_selecionado else 'None'}")
-            print(f"  - operator_password: {'*' * len(operador_selecionado.get('senha', '')) if operador_selecionado else 'None'}")
-            print("="*50 + "\n")
+            # Mostrar progresso
+            self.progress_bar.visible = True
+            self.page.update()
 
-            # Buscar contratos com os parâmetros da empresa selecionada
-            contratos = self.contrato_controller.buscar_contratos(
-                mes=mes_val,
+            # Limpar tabela atual
+            self.data_table.rows.clear()
+
+            # Obter empresa e operador selecionados
+            empresa = self.empresa_dropdown.value
+            operador = self.operador_dropdown.value
+
+            print("\n" + "=" * 80)
+            print("DEPURAÇÃO DE BUSCA DE CONTRATOS")
+            print("=" * 80)
+            print(f"Mês selecionado: {mes_val}")
+            print(f"Ano selecionado: {ano_val}")
+            print(f"Empresa selecionada: {empresa}")
+            print(f"Operador selecionado: {operador}")
+
+            # Buscar dados do operador no banco
+            operador_data = None
+            if operador:
+                operador_data = self.db.get_operador_by_email(operador)
+                if operador_data:
+                    print(f"\nDados do operador encontrados:")
+                    print(f"  - Email: {operador_data['email']}")
+                    print(f"  - Senha: {'*' * len(operador_data['senha'])}")
+                    print(f"  - Tenant ID: {operador_data['tenant_id']}")
+                    print(f"  - Ambiente: {operador_data['ambiente']}")
+                else:
+                    print(f"\nOperador não encontrado no banco: {operador}")
+
+            # Buscar dados da empresa no banco
+            empresa_data = None
+            if empresa:
+                empresa_data = self.db.get_empresa_by_id(empresa)
+                if empresa_data:
+                    print(f"\nDados da empresa encontrados:")
+                    print(f"  - ID: {empresa_data['id']}")
+                    print(f"  - Nome: {empresa_data['nome']}")
+                    print(f"  - Tenant ID: {empresa_data['tenant_id']}")
+                    print(f"  - Ambiente: {empresa_data['ambiente']}")
+                    print(f"  - WSDL URL: {empresa_data['wsdl_url']}")
+                else:
+                    print(f"\nEmpresa não encontrada no banco: {empresa}")
+
+            # Verificar se temos todos os dados necessários
+            if not operador_data or not empresa_data:
+                error_msg = "Dados incompletos para busca:"
+                if not operador_data:
+                    error_msg += "\n- Operador não encontrado no banco"
+                if not empresa_data:
+                    error_msg += "\n- Empresa não encontrada no banco"
+                self.page.show_snack_bar(
+                    ft.SnackBar(content=ft.Text(error_msg))
+                )
+                return
+
+            # Verificar se a empresa tem a URL do WSDL
+            if 'wsdl_url' not in empresa_data or not empresa_data['wsdl_url']:
+                self.page.show_snack_bar(
+                    ft.SnackBar(content=ft.Text("A empresa selecionada não possui URL do WSDL configurada"))
+                )
+                return
+
+            # Buscar contratos
+            contratos = self.contrato_trabalho.buscar_contratos_por_mes(
                 ano=ano_val,
-                codigo_empresa=empresa_selecionada,
-                email_operador=operador_selecionado
+                mes=mes_val,
+                tenet_id=empresa_data['tenant_id'],
+                ambiente=empresa_data['ambiente'],
+                operator_email=operador_data['email'],
+                operator_password=operador_data['senha'],
+                wsdl_url=empresa_data['wsdl_url']
             )
 
-            return contratos
+            # Processar resultados
+            if contratos:
+                for contrato in contratos:
+                    if isinstance(contrato, dict):
+                        self.data_table.rows.append(
+                            ft.DataRow(
+                                cells=[
+                                    ft.DataCell(ft.Text(str(contrato.get('id', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('nome', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('cpf', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('data_admissao', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('cargo', '')))),
+                                    ft.DataCell(ft.Text(str(contrato.get('salario', '')))),
+                                ]
+                            )
+                        )
+                self.total_registros.value = f"Total de registros: {len(contratos)}"
+            else:
+                self.total_registros.value = "Nenhum contrato encontrado"
+
         except Exception as e:
-            print(f"Erro ao buscar contratos: {e}")
-            raise
+            print(f"\nErro ao buscar contratos: {str(e)}")
+            self.page.show_snack_bar(
+                ft.SnackBar(content=ft.Text(f"Erro ao buscar contratos: {str(e)}"))
+            )
+        finally:
+            # Esconder progresso
+            self.progress_bar.visible = False
+            self.page.update()
 
 if __name__ == "__main__":
     app = TelaContratos()
